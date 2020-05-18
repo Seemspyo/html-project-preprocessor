@@ -15,7 +15,7 @@ const
 root = argv.root,
 ext = argv.ext || '.html',
 data = argv.data || {},
-dest = argv.dest || path.resolve(root, '../dest'),
+dist = argv.dist || path.resolve(root, '../dist'),
 skip = argv.context && new RegExp(argv.context, 'i'),
 renderOption = { cache: false, async: true, ...data }
 
@@ -33,13 +33,13 @@ function cleanup(dir) {
     fs.rmdirSync(dir);
 }
 
-function renderTemplate(root, dest, ext) {
+function renderTemplate(root, dist, ext) {
     const
     filter = /\.html$/mi,
     tasks = new Array(),
     counts = { render: 0, copy: 0, skip: 0 }
 
-    if (!fs.existsSync(dest)) fs.mkdirSync(dest)
+    if (!fs.existsSync(dist)) fs.mkdirSync(dist)
 
     for (const filename of fs.readdirSync(root)) {
         if (skip && skip.test(filename)) {
@@ -54,9 +54,9 @@ function renderTemplate(root, dest, ext) {
             tasks.push(
                 ejs.renderFile(inputPath, renderOption)
                 .then(output => {
-                    const outputPath = path.join(dest, filename.replace('.html', ext))
+                    const outputPath = path.join(dist, filename.replace(/\.html$/, ext))
 
-                    fs.writeFileSync(path.join(dest, filename.replace('.html', ext)), output)
+                    fs.writeFileSync(outputPath, output)
 
                     console.log(`rendered: "${ inputPath }" to "${ outputPath }"`)
                 })
@@ -64,19 +64,19 @@ function renderTemplate(root, dest, ext) {
 
             counts.render++;
         } else {
-            const stat = fs.lstatSync(inputPath)
+            const
+            stat = fs.lstatSync(inputPath),
+            outputPath = path.join(dist, filename)
 
             if (stat.isDirectory()) {
-                const { tasks: t, counts: { render, copy, skip } } = renderTemplate(inputPath, path.join(dest, filename), ext)
+                const { tasks: t, counts: { render, copy, skip } } = renderTemplate(inputPath, outputPath, ext)
 
-                tasks.concat(t)
+                tasks = tasks.concat(t)
                 counts.render += render
                 counts.copy += copy
                 counts.skip += skip;
             } else {
-                const outputPath = path.join(dest, filename);
-
-                fs.copyFileSync(inputPath, path.join(dest, filename))
+                fs.copyFileSync(inputPath, outputPath)
                 counts.copy++;
 
                 console.log(`copied: "${ inputPath }" to "${ outputPath }"`)
@@ -87,9 +87,9 @@ function renderTemplate(root, dest, ext) {
     return { tasks, counts }
 }
 
-cleanup(dest)
+cleanup(dist)
 
-const { tasks, counts } = renderTemplate(root, dest, ext)
+const { tasks, counts } = renderTemplate(root, dist, ext)
 
 Promise.all(tasks)
 .then(() => console.log(`
