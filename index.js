@@ -15,7 +15,9 @@ const
 root = argv.root,
 ext = argv.ext || '.html',
 data = argv.data || {},
-dest = argv.dest || path.resolve(root, '../dist')
+dest = argv.dest || path.resolve(root, '../dest'),
+skip = argv.context && new RegExp(argv.context, 'i'),
+renderOption = { cache: false, async: true, ...data }
 
 function cleanup(dir) {
     if (!fs.existsSync(dir)) return;
@@ -35,16 +37,22 @@ function renderTemplate(root, dest, ext) {
     const
     filter = /\.html$/mi,
     tasks = new Array(),
-    counts = { render: 0, copy: 0 }
+    counts = { render: 0, copy: 0, skip: 0 }
 
     if (!fs.existsSync(dest)) fs.mkdirSync(dest)
 
     for (const filename of fs.readdirSync(root)) {
+        if (skip && skip.test(filename)) {
+            counts.skip++;
+            console.log(`skipped: ${ filename }`);
+            continue;
+        }
+
         const inputPath = path.join(root, filename)
 
         if (filter.test(filename)) {
             tasks.push(
-                ejs.renderFile(inputPath, { cache: false, async: true, ...data })
+                ejs.renderFile(inputPath, renderOption)
                 .then(output => {
                     const outputPath = path.join(dest, filename.replace('.html', ext))
 
@@ -59,11 +67,12 @@ function renderTemplate(root, dest, ext) {
             const stat = fs.lstatSync(inputPath)
 
             if (stat.isDirectory()) {
-                const { tasks: t, counts: { render, copy } } = renderTemplate(inputPath, path.join(dest, filename), ext)
+                const { tasks: t, counts: { render, copy, skip } } = renderTemplate(inputPath, path.join(dest, filename), ext)
 
                 tasks.concat(t)
                 counts.render += render
                 counts.copy += copy
+                counts.skip += skip;
             } else {
                 const outputPath = path.join(dest, filename);
 
@@ -83,4 +92,10 @@ cleanup(dest)
 const { tasks, counts } = renderTemplate(root, dest, ext)
 
 Promise.all(tasks)
-.then(() => console.log(`\nrendered: ${ counts.render }\tcopied: ${ counts.copy }\n\nCompile complete`));
+.then(() => console.log(`
+    rendered:\t${ counts.render }
+    copied:\t${ counts.copy }
+    skipped:\t${ counts.skip }
+    
+    Compile complete
+`));
